@@ -1,5 +1,2 @@
-# INF142
-Mandatory assignment
-
-Group members:
-Oskar Kristoffersen
+# team-local-tactics
+A game for the mandatory assignment
