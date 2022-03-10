@@ -1,12 +1,19 @@
+from ctypes import addressof
+from email.headerregistry import Address
+from ssl import ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE
+from tracemalloc import start
 from rich import print
 from rich.prompt import Prompt
 from rich.table import Table
-
 from champlistloader import load_some_champs
 from core import Champion, Match, Shape, Team
 from socket import socket
+from threading import Thread
 import pickle
+import time
 champions = load_some_champs()
+
+print(champions)
 def print_available_champs(champions: dict[Champion]) -> None:
     global available_champs
     # Create a table containing available champions
@@ -25,29 +32,32 @@ def print_available_champs(champions: dict[Champion]) -> None:
 
 
 print_available_champs(champions)
+
 def input_champion(prompt: str,
                    color: str,
                    champions: dict[Champion],
                    player1: list[str],
-                   player2: list[str]) -> None:
-
-    # Prompt the player to choose a champion and provide the reason why
-    # certain champion cannot be selected
+                   player2: list[str],
+                   id:tuple) -> None:
     while True:
-        conn.send(f'[{color}]{prompt} Please select a champion:'.encode())
-        champ_pick = conn.recv(1024).decode()
+        print(id == all_connections[0])
+        id.send(f'[{color}]{prompt} Please select a champion:'.encode())
+        champ_pick = id.recv(1024).decode()
         match champ_pick:
             case name if name not in champions:
-                conn.send(f'[{color}]The champion {name} is not available. Try again. '.encode())
+                id.send(f'[{color}]The champion {name} is not available. Try again. '.encode())
             case name if name in player1:
-                conn.send(f'[{color}]{name} is already in your team. Try again. '.encode())
+                id.send(f'[{color}]{name} is already in your team. Try again. '.encode())
             case name if name in player2:
-                conn.send(f'[{color}]{name} is in the enemy team. Try again. '.encode())
+                id.send(f'[{color}]{name} is in the enemy team. Try again. '.encode())
             case _:
-                player1.append(name)
-                conn.send(f'[{color}]{name} has been chosen by {prompt}. '.encode())
-                break
-
+                 if id == all_connections[0]:
+                    id = all_connections[1]
+                 else:
+                    id = all_connections[0]
+                 player1.append(name)                    
+                 id.send(f'[{color}]{name} has been chosen by {prompt}. '.encode())
+                 break
 
 player1 = []
 player2 = []
@@ -96,25 +106,43 @@ def print_match_summary(match: Match) -> None:
         print('\nDraw :expressionless:')
 
 sock = socket()
-
 sock.bind(("localhost", 5555))
-
 sock.listen()
-print("The server is ready to recieve")
-
+all_connections = []
 print_available_champs(champions)
-print(available_champs)
-while True:
-    #figure out how to send tables to client
-    conn, _=sock.accept()
-    conn.send(pickle.dumps(available_champs))
+def start_server():
+    while True:     
+        global sock
+        global conn
+        conn, address = sock.accept()
+        print('accepted', conn, 'from', address)
+        all_connections.append(conn)
+        Thread(target=threaded_client).start()
 
 
-    #for x in range(2):
-        #input_champion('Player 1', 'red', champions, player1, player2)
-        #input_champion('Player 2', 'blue', champions, player2, player1)
-    conn.send("CLOSING".encode())
-    conn.close()
-
-
+def threaded_client():
+    if len(all_connections) !=2:
+        print("Waiting for players")
+        time.sleep(3)
+    else:
+        all_connections[0].send(("Welcome player1").encode())
+        time.sleep(1)
+        all_connections[1].send(("Welcome player2").encode())
+        time.sleep(1)
+        all_connections[0].send(pickle.dumps(available_champs))
+        time.sleep(1)
+        all_connections[1].send(pickle.dumps(available_champs))
+        time.sleep(1)
+        for x in range (2):
+            input_champion('Player 1', 'red', champions, player1, player2,all_connections[0])
+            input_champion('Player 2', 'blue', champions, player2, player1,all_connections[1])
+start_server()    
     # Print a summary
+"""
+        conn.sendall(pickle.dumps(available_champs))
+        for x in range(0,2):
+            input_champion('Player 1', 'red', champions, player1, player2,x)
+            input_champion('Player 2', 'blue', champions, player2, player1,x)
+        conn.send("CLOSING".encode())
+        conn.close()
+"""

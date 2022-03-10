@@ -16,4 +16,5 @@ def from_csv(filename: str) -> dict[str, Champion]:
 
 
 def load_some_champs():
-    return from_csv('some_champs.txt')
+    return(from_csv('some_champs.txt'))
+    
